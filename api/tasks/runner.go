@@ -36,11 +36,12 @@ func (t *task) fail() {
 }
 
 func (t *task) run() {
-	pool.running = t
+	//pool.running = t
+	pool.running[t.projectID] = t
 
 	defer func() {
 		fmt.Println("Stopped running tasks")
-		pool.running = nil
+		delete(pool.running, t.projectID)
 
 		now := time.Now()
 		t.task.End = &now

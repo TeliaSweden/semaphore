@@ -8,13 +8,15 @@ import (
 type taskPool struct {
 	queue    []*task
 	register chan *task
-	running  *task
+	//running  *task
+	running  map[int]*task
 }
 
 var pool = taskPool{
 	queue:    make([]*task, 0),
 	register: make(chan *task),
-	running:  nil,
+	//running:  nil,
+	running:  make(map[int]*task),
 }
 
 func (p *taskPool) run() {
@@ -28,14 +30,14 @@ func (p *taskPool) run() {
 		select {
 		case task := <-p.register:
 			fmt.Println(task)
-			if p.running == nil {
+			if p.running[task.projectID] == nil {
 				go task.run()
 				continue
 			}
 
 			p.queue = append(p.queue, task)
 		case <-ticker.C:
-			if len(p.queue) == 0 || p.running != nil {
+			if len(p.queue) == 0 || p.running[p.queue[0].projectID] != nil {
 				continue
 			}
 
