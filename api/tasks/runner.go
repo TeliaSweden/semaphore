@@ -109,17 +109,18 @@ func (t *task) prepareRun() {
 }
 
 func (t *task) run() {
-	pool.activeProj[t.projectID] = t
-	for _, node := range t.hosts {
-		pool.activeNodes[node] = t
-	}
+	//pool.activeProj[t.projectID] = t
+	//for _, node := range t.hosts {
+	//	pool.activeNodes[node] = t
+	//}
 
 	defer func() {
 		fmt.Println("Stopped running tasks")
-		delete(pool.activeProj, t.projectID)
-		for _, node := range t.hosts {
-			delete(pool.activeNodes, node)
-		}
+		//delete(pool.activeProj, t.projectID)
+		//for _, node := range t.hosts {
+		//	delete(pool.activeNodes, node)
+		//}
+		resourceLocker <- &resourceLock{lock: false, holder: t,}
 
 		now := time.Now()
 		t.task.End = &now
@@ -371,7 +372,7 @@ func (t *task) runPlaybook() error {
 	cmd.Dir = util.Config.TmpPath + "/repository_" + strconv.Itoa(t.repository.ID)
 	cmd.Env = t.envVars(util.Config.TmpPath, cmd.Dir, nil)
 
-	fmt.Printf("Hosts:\n%q\n", t.hosts)
+	fmt.Printf("Hosts:\n%q\n", t.hosts)//TODO REMOVE
 	t.logCmd(cmd)
 	return cmd.Run()
 }

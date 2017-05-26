@@ -23,6 +23,13 @@ var pool = taskPool{
 	running: 0,
 }
 
+type resourceLock struct {
+	lock     bool
+	holder   *task
+}
+
+var resourceLocker = make(chan *resourceLock)
+
 var CONCURRENCY_MODE = "node"
 var MAX_PARALLEL_JOBS = 10 // Implement the counter using channels
 
@@ -33,30 +40,54 @@ func (p *taskPool) run() {
 		ticker.Stop()
 	}()
 
+	// Lock or unlock resources when running a task
+	go func (locker <-chan *resourceLock) { //Add panic if trying to lock already locked resource
+		for l := range locker {
+			t := l.holder
+			if l.lock {
+				if p.blocks(t) {
+					panic("Trying to lock an already locked resource!")
+				}
+				p.activeProj[t.projectID] = t
+				for _, node := range t.hosts {
+				        p.activeNodes[node] = t
+				}
+				p.running += 1
+			} else {
+				delete(p.activeProj, t.projectID)
+				for _, node := range t.hosts {
+				        delete(pool.activeNodes, node)
+				}
+				p.running -= 1
+			}
+		}
+	}(resourceLocker)
+
+	defer func() {
+		close(resourceLocker)
+	}()
+
 	for {
 		select {
 		case task := <-p.register:
 			fmt.Println(task)
 			go task.prepareRun()
-			//if p.activeProj[task.projectID] == nil {
-			//	go task.run()
-			//	continue
-			//}
-
 			p.queue = append(p.queue, task)
 		case <-ticker.C:
-			//fmt.Printf("Current queue: %v\n", p.queue)
-			if len(p.queue) == 0 || p.running >= MAX_PARALLEL_JOBS {
+			fmt.Printf("Current queue: %v\n", p.queue)//TODO REMOVE
+			fmt.Printf("Running jobs: %d\n", p.running)//TODO REMOVE
+			if len(p.queue) == 0 {
 				continue
 			} else if t := p.queue[0]; t.task.Status != "error" && (!t.prepared || p.blocks(t)) {
-				fmt.Printf("can't start task %d yet\n", t.task.ID)
+				fmt.Printf("can't start task %d yet, blocked: %v\n", t.task.ID, p.blocks(t))//TODO REMOVE
 				p.queue = append(p.queue[1:], t)
 				continue
 			}
 
-			if pool.queue[0].task.Status != "error" {
+			if t := pool.queue[0]; t.task.Status != "error" {
 				fmt.Println("Running a task.")
-				go pool.queue[0].run()
+				resourceLocker <- &resourceLock{lock: true, holder: t,}
+				go t.run()
 			}
 			pool.queue = pool.queue[1:]
 		}
@@ -64,22 +95,24 @@ func (p *taskPool) run() {
 }
 
 func (p *taskPool) blocks(t *task) bool {
-	collision := false
+	if p.running >= MAX_PARALLEL_JOBS {
+		return true
+	}
 	switch CONCURRENCY_MODE {
 	case "project":
-		collision = p.activeProj[t.projectID] != nil
+		return p.activeProj[t.projectID] != nil
 	case "node":
+		collision := false
 		for _, node := range t.hosts {
 			if p.activeNodes[node] != nil {
 				collision = true
 				break
 			}
 		}
+		return collision
 	default:
-		collision = true
+		return true
 	}
-	fmt.Printf("Task %d collision: %t\n", t.task.ID, collision)
-	return collision
 }
 
 func StartRunner() {
