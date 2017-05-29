@@ -77,11 +77,6 @@ func (p *taskPool) run() {
 			if len(p.queue) == 0 {
 				continue
 			} else if t := p.queue[0]; t.task.Status != "error" && (!t.prepared || p.blocks(t)) {
-				fmt.Printf("Current queue: %v\n", p.queue)//TODO REMOVE
-				fmt.Printf("Running jobs: %d\n", p.running)//TODO REMOVE
-				fmt.Printf("activeProj:   %v\n", p.activeProj)//TODO REMOVE
-				fmt.Printf("activeNodes:   %v\n", p.activeNodes)//TODO REMOVE
-				fmt.Printf("can't start task %d yet, blocked: %v\n", t.task.ID, p.blocks(t))//TODO REMOVE
 				p.queue = append(p.queue[1:], t)
 				continue
 			}
