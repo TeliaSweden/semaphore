@@ -3,12 +3,13 @@ package tasks
 import (
 	"fmt"
 	"time"
+
+	"github.com/ansible-semaphore/semaphore/util"
 )
 
 type taskPool struct {
 	queue       []*task
 	register    chan *task
-	//running     *task
 	activeProj  map[int]*task
 	activeNodes map[string]*task
 	running int
@@ -17,7 +18,6 @@ type taskPool struct {
 var pool = taskPool{
 	queue:       make([]*task, 0),
 	register:    make(chan *task),
-	//running:     nil,
 	activeProj:  make(map[int]*task),
 	activeNodes: make(map[string]*task),
 	running: 0,
@@ -30,10 +30,12 @@ type resourceLock struct {
 
 var resourceLocker = make(chan *resourceLock)
 
-var CONCURRENCY_MODE = "node"
-var MAX_PARALLEL_JOBS = 10 // Implement the counter using channels
-
 func (p *taskPool) run() {
+
+	defer func() {
+		close(resourceLocker)
+	}()
+
 	ticker := time.NewTicker(5 * time.Second)
 
 	defer func() {
@@ -41,7 +43,7 @@ func (p *taskPool) run() {
 	}()
 
 	// Lock or unlock resources when running a task
-	go func (locker <-chan *resourceLock) { //Add panic if trying to lock already locked resource
+	go func (locker <-chan *resourceLock) {
 		for l := range locker {
 			t := l.holder
 			if l.lock {
@@ -50,22 +52,20 @@ func (p *taskPool) run() {
 				}
 				p.activeProj[t.projectID] = t
 				for _, node := range t.hosts {
-				        p.activeNodes[node] = t
+					p.activeNodes[node] = t
 				}
 				p.running += 1
 			} else {
-				delete(p.activeProj, t.projectID)
+				if p.activeProj[t.projectID] == t {
+					delete(p.activeProj, t.projectID)
+				}
 				for _, node := range t.hosts {
-				        delete(pool.activeNodes, node)
+					delete(p.activeNodes, node)
 				}
 				p.running -= 1
 			}
 		}
 	}(resourceLocker)
-
-	defer func() {
-		close(resourceLocker)
-	}()
 
 	for {
 		select {
@@ -74,11 +74,13 @@ func (p *taskPool) run() {
 			go task.prepareRun()
 			p.queue = append(p.queue, task)
 		case <-ticker.C:
-			fmt.Printf("Current queue: %v\n", p.queue)//TODO REMOVE
-			fmt.Printf("Running jobs: %d\n", p.running)//TODO REMOVE
 			if len(p.queue) == 0 {
 				continue
 			} else if t := p.queue[0]; t.task.Status != "error" && (!t.prepared || p.blocks(t)) {
+				fmt.Printf("Current queue: %v\n", p.queue)//TODO REMOVE
+				fmt.Printf("Running jobs: %d\n", p.running)//TODO REMOVE
+				fmt.Printf("activeProj:   %v\n", p.activeProj)//TODO REMOVE
+				fmt.Printf("activeNodes:   %v\n", p.activeNodes)//TODO REMOVE
 				fmt.Printf("can't start task %d yet, blocked: %v\n", t.task.ID, p.blocks(t))//TODO REMOVE
 				p.queue = append(p.queue[1:], t)
 				continue
@@ -95,10 +97,10 @@ func (p *taskPool) run() {
 }
 
 func (p *taskPool) blocks(t *task) bool {
-	if p.running >= MAX_PARALLEL_JOBS {
+	if p.running >= util.Config.MaxParallelTasks {
 		return true
 	}
-	switch CONCURRENCY_MODE {
+	switch util.Config.ConcurrencyMode {
 	case "project":
 		return p.activeProj[t.projectID] != nil
 	case "node":
@@ -111,7 +113,7 @@ func (p *taskPool) blocks(t *task) bool {
 		}
 		return collision
 	default:
-		return true
+		return p.running > 0
 	}
 }
 

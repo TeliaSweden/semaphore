@@ -109,17 +109,9 @@ func (t *task) prepareRun() {
 }
 
 func (t *task) run() {
-	//pool.activeProj[t.projectID] = t
-	//for _, node := range t.hosts {
-	//	pool.activeNodes[node] = t
-	//}
 
 	defer func() {
 		fmt.Println("Stopped running tasks")
-		//delete(pool.activeProj, t.projectID)
-		//for _, node := range t.hosts {
-		//	delete(pool.activeNodes, node)
-		//}
 		resourceLocker <- &resourceLock{lock: false, holder: t,}
 
 		now := time.Now()
