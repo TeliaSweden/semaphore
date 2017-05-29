@@ -29,6 +29,7 @@ type task struct {
 	alert       bool
 	hosts       []string
 	prepared    bool
+	alert_chat  string
 }
 
 func (t *task) fail() {
@@ -192,10 +193,18 @@ func (t *task) populateDetails() error {
 		return err
 	}
 
+	type AlertSettings struct {
+		Alert     bool   `db:"alert"`
+		AlertChat string `db:"alert_chat"`
+	}
+
+	var project db.Project
 	// get project alert setting
-	if err := t.fetch("Alert setting not found!", &t.alert, "select alert from project where id=?", t.template.ProjectID); err != nil {
+	if err := t.fetch("Alert setting not found!", &project, "select alert, alert_chat from project where id=?", t.template.ProjectID); err != nil {
 		return err
 	}
+	t.alert = project.Alert
+	t.alert_chat = project.AlertChat
 
 	// get project users
 	var users []struct {
@@ -364,7 +373,6 @@ func (t *task) runPlaybook() error {
 	cmd.Dir = util.Config.TmpPath + "/repository_" + strconv.Itoa(t.repository.ID)
 	cmd.Env = t.envVars(util.Config.TmpPath, cmd.Dir, nil)
 
-	fmt.Printf("Hosts:\n%q\n", t.hosts)//TODO REMOVE
 	t.logCmd(cmd)
 	return cmd.Run()
 }

@@ -99,6 +99,7 @@ func Route() mulekick.Router {
 		api.Get("/tasks", tasks.GetAll)
 		api.Post("/tasks", tasks.AddTask)
 		api.Get("/tasks/{task_id}/output", tasks.GetTaskMiddleware, tasks.GetTaskOutput)
+		api.Get("/tasks/{task_id}", tasks.GetTaskMiddleware, tasks.GetTask)
 		api.Delete("/tasks/{task_id}", tasks.GetTaskMiddleware, tasks.RemoveTask)
 	}(api.Group("/project/{project_id}"))
 
@@ -130,6 +131,14 @@ func servePublic(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		mulekick.NotFoundHandler(w, r)
 		return
+	}
+
+	// replace base path
+	if util.WebHostURL != nil && path == "public/html/index.html" {
+		res = []byte(strings.Replace(string(res),
+			"<base href=\"/\">",
+			"<base href=\""+util.WebHostURL.String()+"\">",
+			1))
 	}
 
 	contentType := "text/plain"
